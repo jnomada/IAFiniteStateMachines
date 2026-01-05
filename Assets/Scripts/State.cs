@@ -15,7 +15,8 @@ public class State {
         PURSUE,     // Perseguindo
         ATTACK,     // Atacando
         SLEEP,      // Durmindo
-        RUNAWAY     // Fuxindo
+        RUNAWAY,     // Fuxindo
+        ROAR        // Rugir
     };
 
     // Enumeración dos eventos do ciclo de vida dun estado
@@ -34,9 +35,11 @@ public class State {
     protected State nextState;              // Próximo estado ao que transicionar
     protected NavMeshAgent agent;           // Axente de navegación do NPC
 
-    float visionDistance = 10.0f;                  // Distancia de visión do NPC
-    float visionAngle = 30.0f;                 // Ángulo de visión do NPC
-    float shootDistance = 7.0f;                 // Distancia de disparo do NPC
+    float visionDistance = 15.0f;                  // Distancia de visión do NPC
+    float visionAngle = 15.0f;                 // Ángulo de visión do NPC
+    float shootDistance = 4.0f;                 // Distancia de disparo do NPC
+
+    protected bool hasRoared = false;
 
     //=========================================================================
     // Constructor que inicializa as referencias básicas do estado
@@ -92,6 +95,7 @@ public class State {
 
         return false;       // O NPC non pode ver ao xogador
     }
+    
 
     //=========================================================================
     // Comproba se o xogador está detrás do NPC
@@ -154,7 +158,14 @@ public class Idle : State
     {
         if (CanSeePlayer())         // Se o NPC ve ao xogador...
         {
-            nextState = new Pursue(npc, agent, animator, player);  // Crea un estado de persecución
+            if (!hasRoared)
+            {
+                nextState = new Roar(npc, agent, animator, player);
+            }
+            else
+            {
+                nextState = new Pursue(npc, agent, animator, player);  // Crea un estado de persecución
+            }
             stage = EVENT.EXIT;                                 // Marca para saír do estado actual
         }
         else if (Random.Range(0, 100) < 10)     // 10% de probabilidade de comezar a patrullar
@@ -188,7 +199,6 @@ public class Patrol : State
         name = STATE.PATROL;
         agent.speed = 2.0f;         // Velocidade de patrulla
         agent.isStopped = false;
-
     }
 
     //=========================================================================
@@ -239,15 +249,23 @@ public class Patrol : State
         // Se ve ao xogador, cambia a modo persecución
         if (CanSeePlayer())
         {
-            nextState = new Pursue(npc, agent, animator, player);
+            if (!hasRoared)
+            {
+                nextState = new Roar(npc, agent, animator, player);
+            }
+            else
+            {
+                nextState = new Pursue(npc, agent, animator, player);  // Crea un estado de persecución
+            }
+
             stage = EVENT.EXIT;
         }
         // Se o xogador está detrás, foxe
-        else if (IsPlayerBehind())
+        /*else if (IsPlayerBehind())
         {
             nextState = new RunAway(npc, agent, animator, player);
             stage = EVENT.EXIT;
-        }
+        }*/
     }
 
     //=========================================================================
@@ -331,7 +349,7 @@ public class Attack : State
         : base(_npc, _agent, _animator, _player)
     {
         name = STATE.ATTACK;
-        shoot = _npc.GetComponent<AudioSource>();
+        //shoot = _npc.GetComponent<AudioSource>();
     }
 
     //=========================================================================
@@ -339,9 +357,10 @@ public class Attack : State
     //=========================================================================
     public override void Enter()
     {
-        animator.SetTrigger("isShooting");  // Activa a animación de disparar
+        //animator.SetTrigger("isShooting");  // Activa a animación de disparar
+        animator.SetTrigger("isAttacking");
         agent.isStopped = true;         // Detén o movemento do NPC
-        shoot.Play();                   // Reproduce o son de disparo
+        //shoot.Play();                   // Reproduce o son de disparo
         base.Enter();                   // Chama ao método Enter da clase base
     }
 
@@ -363,7 +382,7 @@ public class Attack : State
         if (!CanAttackPlayer())
         {
             nextState = new Idle(npc, agent, animator, player);     // Volve ao estado inactivo
-            shoot.Stop();                                       // Detén o son de disparo
+            //shoot.Stop();                                       // Detén o son de disparo
             stage = EVENT.EXIT;                                 // Marca para saír do estado
         }
     }
@@ -373,7 +392,7 @@ public class Attack : State
     //=========================================================================
     public override void Exit()
     {
-        animator.ResetTrigger("isShooting");    // Limpa o trigger da animación de disparar
+        animator.ResetTrigger("isAttacking");    // Limpa o trigger da animación de disparar
         base.Exit();                        // Chama ao método Exit da clase base
     }
 }
@@ -428,3 +447,46 @@ public class RunAway : State
         base.Exit();                        // Chama ao método Exit da clase base
     }
 }
+
+//======================================================================================
+// Estado de "Rugir". El monstruo ruge cuando ve al jugador, estado anterior a "Persue
+//======================================================================================
+public class Roar : State
+{
+    AudioSource audioSource;
+    float roarTimer = 0f;
+    const float roarDuration = 2.5f;
+      public Roar(GameObject _npc, NavMeshAgent _agent, Animator _animator, Transform _player)
+        : base(_npc, _agent, _animator, _player)
+    {
+        name = STATE.ROAR;
+        audioSource = _npc.GetComponent<AudioSource>();
+        agent.isStopped = true;
+    }
+
+  public override void Enter()
+  {
+    animator.SetTrigger("isRoaring");
+    audioSource.Play();
+    hasRoared = true;
+    base.Enter();
+  }
+
+  public override void Update()
+  {
+    roarTimer += Time.deltaTime;
+
+    if (roarTimer >= roarDuration)
+    {
+        nextState = new Pursue(npc, agent, animator, player);
+        stage = EVENT.EXIT;    
+    }
+  }
+
+  public override void Exit()
+  {
+    animator.ResetTrigger("isRoaring");
+    agent.isStopped = false;
+    base.Exit();
+  }
+};
